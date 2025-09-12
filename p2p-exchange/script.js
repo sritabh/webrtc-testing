@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /**
  * WebRTC P2P Complete Signaling Demo
  * This script handles the WebRTC connection between two peers with complete signaling
@@ -19,7 +20,11 @@ const iceConfig = {
   iceServers: [
     {urls: 'stun:stun.l.google.com:19302'},
     {urls: 'stun:stun1.l.google.com:19302'}
-  ]
+  ],
+  // Optional: Control candidate gathering
+  // iceCandidatePoolSize: 1,           // Limit candidate pool
+  // iceTransportPolicy: 'all',         // 'all' or 'relay' (TURN only)
+  // bundlePolicy: 'balanced',          // 'balanced', 'max-compat', or 'max-bundle'
 };
 
 /**
@@ -120,14 +125,26 @@ function initializePeerConnection() {
   peer.pc.onicecandidate = (event) => {
     if (event.candidate) {
       peer.pendingCandidates.push(event.candidate);
-      const candidateType = event.candidate.candidate.includes('typ host') ? 'HOST' :
-                           event.candidate.candidate.includes('typ srflx') ? 'STUN' :
-                           event.candidate.candidate.includes('typ relay') ? 'TURN' : 'OTHER';
-      addDebugInfo(`🔍 Generated ${candidateType} candidate`, 'info');
+
+      // Extract detailed candidate information
+      const candidateString = event.candidate.candidate;
+      const candidateType = candidateString.includes('typ host') ? 'HOST' :
+                           candidateString.includes('typ srflx') ? 'STUN' :
+                           candidateString.includes('typ relay') ? 'TURN' : 'OTHER';
+
+      // Parse candidate details
+      const parts = candidateString.split(' ');
+      const ip = parts[4] || 'unknown';
+      const port = parts[5] || 'unknown';
+      const protocol = parts[2] || 'unknown';
+      const priority = parts[3] || 'unknown';
+
+      addDebugInfo(`🔍 Generated ${candidateType} candidate:`, 'info');
+      addDebugInfo(`   📍 ${ip}:${port} (${protocol.toUpperCase()}, priority: ${priority})`, 'info');
     } else {
       // ICE gathering complete (null candidate)
       peer.iceGatheringComplete = true;
-      addDebugInfo(`🏁 ICE gathering complete!`, 'success');
+      addDebugInfo(`🏁 ICE gathering complete! Total: ${peer.pendingCandidates.length} candidates`, 'success');
       if (peer.completeSignalingData) {
         completeSignalingReady();
       }
@@ -144,6 +161,8 @@ function initializePeerConnection() {
     switch (state) {
       case 'connected':
         updateStatus('Connected');
+        // Show which candidate was selected for the connection
+        showSelectedCandidates();
         break;
       case 'connecting':
         updateStatus('Connecting...');
@@ -152,6 +171,18 @@ function initializePeerConnection() {
       case 'failed':
         updateStatus('Disconnected');
         break;
+    }
+  };
+
+  // Handle ICE connection state changes for more detailed candidate info
+  peer.pc.oniceconnectionstatechange = () => {
+    const state = peer.pc.iceConnectionState;
+    addDebugInfo(`🧊 ICE: ${state.toUpperCase()}`,
+                state === 'connected' || state === 'completed' ? 'success' :
+                state === 'failed' ? 'error' : 'info');
+
+    if (state === 'connected') {
+      showSelectedCandidates();
     }
   };
 
@@ -368,6 +399,47 @@ function resetPeer() {
 
   updateStatus('Disconnected');
   addDebugInfo(`🔄 Peer ${currentPeer} reset`, 'info');
+}
+
+/**
+ * Show which ICE candidates were selected for the active connection
+ */
+async function showSelectedCandidates() {
+  try {
+    const stats = await peer.pc.getStats();
+
+    stats.forEach((report) => {
+      if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+        const localCandidateId = report.localCandidateId;
+        const remoteCandidateId = report.remoteCandidateId;
+
+        // Find the actual candidate details
+        const localCandidate = Array.from(stats.values()).find(s => s.id === localCandidateId);
+        const remoteCandidate = Array.from(stats.values()).find(s => s.id === remoteCandidateId);
+
+        if (localCandidate && remoteCandidate) {
+          const localType = localCandidate.candidateType || 'unknown';
+          const remoteType = remoteCandidate.candidateType || 'unknown';
+          const localAddr = `${localCandidate.ip || 'unknown'}:${localCandidate.port || '?'}`;
+          const remoteAddr = `${remoteCandidate.ip || 'unknown'}:${remoteCandidate.port || '?'}`;
+
+          addDebugInfo(`🎯 SELECTED PAIR:`, 'success');
+          addDebugInfo(`   Local: ${localType.toUpperCase()} ${localAddr}`, 'success');
+          addDebugInfo(`   Remote: ${remoteType.toUpperCase()} ${remoteAddr}`, 'success');
+
+          // Show additional connection details
+          if (report.bytesSent !== undefined) {
+            addDebugInfo(`   📊 Bytes sent: ${report.bytesSent}, received: ${report.bytesReceived}`, 'info');
+          }
+          if (report.currentRoundTripTime !== undefined) {
+            addDebugInfo(`   ⏱️ RTT: ${Math.round(report.currentRoundTripTime * 1000)}ms`, 'info');
+          }
+        }
+      }
+    });
+  } catch (error) {
+    addDebugInfo(`❌ Could not get connection stats: ${error.message}`, 'warning');
+  }
 }
 
 /**
