@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC P2P - Complete Signaling Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>🌐 WebRTC Complete Signaling Demo</h1>
+
+  <div class="explanation">
+    <h2>How This Works:</h2>
+    <div class="step">
+      <strong>Better Approach:</strong> This version bundles SDP + ICE candidates together, avoiding timing issues.
+    </div>
+    <div class="step">
+      <strong>Step 1:</strong> Open in two browsers: <code>#peer1</code> and <code>#peer2</code>
+    </div>
+    <div class="step">
+      <strong>Step 2:</strong> Peer A: Create complete offer (waits for all ICE candidates)
+    </div>
+    <div class="step">
+      <strong>Step 3:</strong> Peer B: Paste complete offer → Create complete answer
+    </div>
+    <div class="step">
+      <strong>Step 4:</strong> Peer A: Paste complete answer → Connection establishes! 🎉
+    </div>
+    <p><em>✨ No more timing issues - everything is bundled together!</em></p>
+  </div>
+
+  <div class="tab-container">
+    <div class="tab-buttons">
+      <button class="tab-button active" onclick="switchTab('peer-a')">
+        🔵 Peer A (Caller)
+      </button>
+      <button class="tab-button" onclick="switchTab('peer-b')">
+        🟢 Peer B (Callee)
+      </button>
+    </div>
+
+    <!-- Peer A Tab -->
+    <div id="peer-a" class="tab-content peer-a active">
+      <h2 class="peer-header">🔵 Peer A (Caller)</h2>
+      <div id="statusA" class="status disconnected">Disconnected</div>
+
+      <div class="section">
+        <h3>Step 1: Create Complete Offer</h3>
+        <button onclick="createCompleteOffer()">1. Create Complete Offer (SDP + ICE)</button>
+        <button onclick="resetPeer()" class="reset-btn">Reset</button>
+        <p><strong>Complete Offer (copy this to Peer B):</strong></p>
+        <textarea id="completeOfferA" placeholder="Complete offer (SDP + ICE candidates) will appear here..." readonly></textarea>
+        <button onclick="copyToClipboard('completeOfferA')" class="copy-btn">📋 Copy</button>
+      </div>
+
+      <div class="section">
+        <h3>Step 3: Set Complete Answer</h3>
+        <p><strong>Paste Peer B's Complete Answer here:</strong></p>
+        <textarea id="completeAnswerA" placeholder="Paste Peer B's complete answer here..."></textarea>
+        <button onclick="setCompleteAnswer()">3. Set Complete Answer</button>
+      </div>
+
+      <div class="section">
+        <h3>💬 Messages</h3>
+        <div class="message-input">
+          <input type="text" id="messageInputA" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div id="messagesA" class="messages"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 Debug</h3>
+        <div id="debugA" class="debug"></div>
+      </div>
+    </div>
+
+    <!-- Peer B Tab -->
+    <div id="peer-b" class="tab-content peer-b">
+      <h2 class="peer-header">🟢 Peer B (Callee)</h2>
+      <div id="statusB" class="status disconnected">Disconnected</div>
+
+      <div class="section">
+        <h3>Step 2: Create Complete Answer</h3>
+        <p><strong>Paste Peer A's Complete Offer here:</strong></p>
+        <textarea id="completeOfferB" placeholder="Paste Peer A's complete offer here..."></textarea>
+        <button onclick="createCompleteAnswer()">2. Create Complete Answer</button>
+        <button onclick="resetPeer()" class="reset-btn">Reset</button>
+      </div>
+
+      <div class="section">
+        <h3>Complete Answer (copy this to Peer A)</h3>
+        <textarea id="completeAnswerB" placeholder="Complete answer will appear here..." readonly></textarea>
+        <button onclick="copyToClipboard('completeAnswerB')" class="copy-btn">📋 Copy</button>
+      </div>
+
+      <div class="section">
+        <h3>💬 Messages</h3>
+        <div class="message-input">
+          <input type="text" id="messageInputB" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div id="messagesB" class="messages"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 Debug</h3>
+        <div id="debugB" class="debug"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
