@@ -212,30 +212,35 @@
   <h1>🌐 WebRTC P2P Connection - Multi-Browser Demo</h1>
 
   <div class="explanation">
-    <h2>How to Test This:</h2>
+    <h2>⚠️ IMPORTANT: Manual ICE Candidate Exchange</h2>
+    <div class="step">
+      <strong>Critical Timing:</strong> WebRTC automatically attempts connection as soon as both peers have SDP offer/answer set. You have about <strong>5 seconds</strong> to exchange ICE candidates before it gives up and fails.
+    </div>
+
+    <h3>Steps to Test:</h3>
     <div class="step">
       <strong>Step 1:</strong> Open <strong>two different browsers</strong> and navigate to:
       <ul>
-        <li>Browser 1: <code>index3.html#peer1</code> (will show Peer A tab)</li>
-        <li>Browser 2: <code>index3.html#peer2</code> (will show Peer B tab)</li>
+        <li>Browser 1: <code>index3.html#peer1</code> (Peer A tab)</li>
+        <li>Browser 2: <code>index3.html#peer2</code> (Peer B tab)</li>
       </ul>
     </div>
     <div class="step">
-      <strong>Step 2:</strong> In Browser 1 (Peer A), click "Create Offer" and copy the offer
+      <strong>Step 2:</strong> Peer A: Create Offer → Wait for ICE gathering complete
     </div>
     <div class="step">
-      <strong>Step 3:</strong> In Browser 2 (Peer B), paste the offer and click "Set Remote & Create Answer", then copy the answer
+      <strong>Step 3:</strong> Peer B: Paste offer → Create Answer → Wait for ICE gathering complete
     </div>
     <div class="step">
-      <strong>Step 4:</strong> In Browser 1 (Peer A), paste the answer and click "Set Remote Description"
+      <strong>Step 4:</strong> Peer A: Paste answer → Set Remote Description
     </div>
     <div class="step">
-      <strong>Step 5:</strong> <strong>CRITICAL:</strong> Copy ICE candidates from each browser and paste them into the other browser, then click "Add Remote ICE Candidates" on both sides
+      <strong>Step 5:</strong> <strong>IMMEDIATELY:</strong> Exchange ICE candidates on both sides before 5-second timeout!
     </div>
     <div class="step">
-      <strong>Step 6:</strong> Connection will now establish and you can send messages between browsers! 🎉
+      <strong>Step 6:</strong> Connection establishes and messages work! 🎉
     </div>
-    <p><em>✨ The URL hash (#peer1/#peer2) keeps you on the right tab when testing!</em></p>
+    <p><em>💡 If connection fails, reset both peers and try again - timing is critical!</em></p>
   </div>
 
   <div class="tab-container">
@@ -359,7 +364,8 @@
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      ],
+      iceCandidatePoolSize: 0 // Disable pre-gathering
     };
 
     // Tab switching
@@ -382,7 +388,7 @@
 
       // Update current peer
       currentPeer = tabId === 'peer-a' ? 'A' : 'B';
-      
+
       // Update URL hash
       window.location.hash = currentPeer === 'A' ? 'peer1' : 'peer2';
     }
@@ -393,7 +399,7 @@
       if (hash === '#peer1' || hash === '#peer2') {
         const tabId = hash === '#peer1' ? 'peer-a' : 'peer-b';
         currentPeer = hash === '#peer1' ? 'A' : 'B';
-        
+
         // Switch to the correct tab
         document.querySelectorAll('.tab-content').forEach(tab => {
           tab.classList.remove('active');
@@ -401,7 +407,7 @@
         document.querySelectorAll('.tab-button').forEach(btn => {
           btn.classList.remove('active');
         });
-        
+
         document.getElementById(tabId).classList.add('active');
         document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
       }
@@ -524,7 +530,8 @@
 
         } else {
           peer.iceGatheringComplete = true;
-          addDebugInfo(`🏁 ICE candidate gathering complete`, 'success');
+          addDebugInfo(`🏁 ICE candidate gathering complete - Ready to exchange!`, 'success');
+          updateStatus('ICE Gathering Complete - Ready to Exchange');
         }
       };
 
@@ -532,9 +539,15 @@
       peer.pc.onconnectionstatechange = () => {
         const state = peer.pc.connectionState;
         console.log(`Connection state:`, state);
-        addDebugInfo(`🔗 Connection state: ${state.toUpperCase()}`,
-                    state === 'connected' ? 'success' :
-                    state === 'failed' ? 'error' : 'info');
+
+        if (state === 'failed' && peer.pendingCandidates.length > 0) {
+          addDebugInfo(`❌ Connection FAILED - ICE candidates not exchanged in time!`, 'error');
+          addDebugInfo(`� WebRTC started connecting before manual ICE exchange`, 'error');
+        } else {
+          addDebugInfo(`�🔗 Connection state: ${state.toUpperCase()}`,
+                      state === 'connected' ? 'success' :
+                      state === 'failed' ? 'error' : 'info');
+        }
 
         switch(state) {
           case 'connected':
@@ -545,7 +558,7 @@
             break;
           case 'disconnected':
           case 'failed':
-            updateStatus('Disconnected');
+            updateStatus('Connection Failed');
             break;
         }
       };
@@ -626,7 +639,8 @@
         // Display the offer SDP
         document.getElementById(`localDescA`).value = JSON.stringify(offer, null, 2);
 
-        updateStatus('Offer Created');
+        updateStatus('Offer Created - Gathering ICE Candidates...');
+        addDebugInfo(`🔄 ICE candidates will appear below as they're discovered`, 'info');
 
       } catch (error) {
         console.error(`Error creating offer:`, error);
@@ -664,10 +678,10 @@
         // Display the answer SDP
         document.getElementById(`localDescB`).value = JSON.stringify(answer, null, 2);
 
-        updateStatus('Ready for ICE Candidates');
+        updateStatus('Answer Created - Gathering ICE Candidates...');
         console.log(`Created answer:`, answer);
         addDebugInfo(`📝 Answer created and local description set`, 'success');
-        addDebugInfo(`⚠️ Now exchange ICE candidates before connection attempts`, 'warning');
+        addDebugInfo(`🔄 ICE candidates will appear below as they're discovered`, 'info');
 
       } catch (error) {
         console.error(`Error setting remote description and creating answer:`, error);
@@ -699,8 +713,8 @@
         console.log(`Remote description set successfully`);
         addDebugInfo(`✅ Remote ${remoteDesc.type} description set successfully`, 'success');
 
-        updateStatus('Ready for ICE Candidates');
-        addDebugInfo(`⚠️ Now exchange ICE candidates before connection attempts`, 'warning');
+        updateStatus('Ready - ICE Exchange Required');
+        addDebugInfo(`⚠️ CRITICAL: Exchange ICE candidates now to prevent connection failure`, 'warning');
 
       } catch (error) {
         console.error(`Error setting remote description:`, error);

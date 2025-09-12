@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC P2P - Complete Signaling Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+
+    .tab-container {
+      background: white;
+      border-radius: 10px 10px 0 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+      margin-bottom: 0;
+    }
+
+    .tab-buttons {
+      display: flex;
+      background: #f8f9fa;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .tab-button {
+      flex: 1;
+      padding: 15px 20px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.3s;
+      color: #666;
+    }
+
+    .tab-button.active {
+      background: white;
+      color: #007bff;
+      border-bottom: 3px solid #007bff;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 30px;
+      background: white;
+      border-radius: 0 0 10px 10px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .peer-header {
+      color: #333;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+
+    .peer-b .peer-header {
+      border-bottom-color: #28a745;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .peer-b button {
+      background: #28a745;
+    }
+
+    button:hover {
+      opacity: 0.8;
+    }
+
+    .reset-btn {
+      background: #dc3545 !important;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 11px;
+      box-sizing: border-box;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    .status.disconnected { background: #f8d7da; color: #721c24; }
+    .status.connecting { background: #fff3cd; color: #856404; }
+    .status.connected { background: #d4edda; color: #155724; }
+    .status.gathering { background: #d1ecf1; color: #0c5460; }
+
+    .section {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      border-left: 4px solid #007bff;
+    }
+
+    .peer-b .section {
+      border-left-color: #28a745;
+    }
+
+    .copy-btn {
+      background: #6c757d !important;
+      font-size: 12px;
+      padding: 5px 10px;
+      margin-left: 10px;
+    }
+
+    .explanation {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .step {
+      margin: 15px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      border-radius: 0 5px 5px 0;
+    }
+
+    .debug {
+      font-family: monospace;
+      font-size: 12px;
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 5px;
+      height: 120px;
+      overflow-y: auto;
+      border: 1px solid #e9ecef;
+      margin-top: 10px;
+    }
+
+    .messages {
+      height: 100px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 5px;
+      margin-top: 10px;
+    }
+
+    .message-input {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .message-input input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌐 WebRTC Complete Signaling Demo</h1>
+
+  <div class="explanation">
+    <h2>How This Works:</h2>
+    <div class="step">
+      <strong>Better Approach:</strong> This version bundles SDP + ICE candidates together, avoiding timing issues.
+    </div>
+    <div class="step">
+      <strong>Step 1:</strong> Open in two browsers: <code>#peer1</code> and <code>#peer2</code>
+    </div>
+    <div class="step">
+      <strong>Step 2:</strong> Peer A: Create complete offer (waits for all ICE candidates)
+    </div>
+    <div class="step">
+      <strong>Step 3:</strong> Peer B: Paste complete offer → Create complete answer
+    </div>
+    <div class="step">
+      <strong>Step 4:</strong> Peer A: Paste complete answer → Connection establishes! 🎉
+    </div>
+    <p><em>✨ No more timing issues - everything is bundled together!</em></p>
+  </div>
+
+  <div class="tab-container">
+    <div class="tab-buttons">
+      <button class="tab-button active" onclick="switchTab('peer-a')">
+        🔵 Peer A (Caller)
+      </button>
+      <button class="tab-button" onclick="switchTab('peer-b')">
+        🟢 Peer B (Callee)
+      </button>
+    </div>
+
+    <!-- Peer A Tab -->
+    <div id="peer-a" class="tab-content peer-a active">
+      <h2 class="peer-header">🔵 Peer A (Caller)</h2>
+      <div id="statusA" class="status disconnected">Disconnected</div>
+
+      <div class="section">
+        <h3>Step 1: Create Complete Offer</h3>
+        <button onclick="createCompleteOffer()">1. Create Complete Offer (SDP + ICE)</button>
+        <button onclick="resetPeer()" class="reset-btn">Reset</button>
+        <p><strong>Complete Offer (copy this to Peer B):</strong></p>
+        <textarea id="completeOfferA" placeholder="Complete offer (SDP + ICE candidates) will appear here..." readonly></textarea>
+        <button onclick="copyToClipboard('completeOfferA')" class="copy-btn">📋 Copy</button>
+      </div>
+
+      <div class="section">
+        <h3>Step 3: Set Complete Answer</h3>
+        <p><strong>Paste Peer B's Complete Answer here:</strong></p>
+        <textarea id="completeAnswerA" placeholder="Paste Peer B's complete answer here..."></textarea>
+        <button onclick="setCompleteAnswer()">3. Set Complete Answer</button>
+      </div>
+
+      <div class="section">
+        <h3>💬 Messages</h3>
+        <div class="message-input">
+          <input type="text" id="messageInputA" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div id="messagesA" class="messages"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 Debug</h3>
+        <div id="debugA" class="debug"></div>
+      </div>
+    </div>
+
+    <!-- Peer B Tab -->
+    <div id="peer-b" class="tab-content peer-b">
+      <h2 class="peer-header">🟢 Peer B (Callee)</h2>
+      <div id="statusB" class="status disconnected">Disconnected</div>
+
+      <div class="section">
+        <h3>Step 2: Create Complete Answer</h3>
+        <p><strong>Paste Peer A's Complete Offer here:</strong></p>
+        <textarea id="completeOfferB" placeholder="Paste Peer A's complete offer here..."></textarea>
+        <button onclick="createCompleteAnswer()">2. Create Complete Answer</button>
+        <button onclick="resetPeer()" class="reset-btn">Reset</button>
+      </div>
+
+      <div class="section">
+        <h3>Complete Answer (copy this to Peer A)</h3>
+        <textarea id="completeAnswerB" placeholder="Complete answer will appear here..." readonly></textarea>
+        <button onclick="copyToClipboard('completeAnswerB')" class="copy-btn">📋 Copy</button>
+      </div>
+
+      <div class="section">
+        <h3>💬 Messages</h3>
+        <div class="message-input">
+          <input type="text" id="messageInputB" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div id="messagesB" class="messages"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 Debug</h3>
+        <div id="debugB" class="debug"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPeer = 'A';
+    let peer = {
+      pc: null,
+      dc: null,
+      pendingCandidates: [],
+      iceGatheringComplete: false,
+      completeSignalingData: null
+    };
+
+    const iceConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+
+      currentPeer = tabId === 'peer-a' ? 'A' : 'B';
+      window.location.hash = currentPeer === 'A' ? 'peer1' : 'peer2';
+    }
+
+    function initializeFromHash() {
+      const hash = window.location.hash;
+      if (hash === '#peer1' || hash === '#peer2') {
+        const tabId = hash === '#peer1' ? 'peer-a' : 'peer-b';
+        currentPeer = hash === '#peer1' ? 'A' : 'B';
+
+        document.querySelectorAll('.tab-content').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-button').forEach(btn => {
+          btn.classList.remove('active');
+        });
+
+        document.getElementById(tabId).classList.add('active');
+        document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+      }
+    }
+
+    function updateStatus(status) {
+      const statusEl = document.getElementById(`status${currentPeer}`);
+      statusEl.textContent = status;
+      statusEl.className = `status ${status.toLowerCase().replace(/[^a-z]/g, '')}`;
+    }
+
+    function addDebugInfo(message, type = 'info') {
+      const debugEl = document.getElementById(`debug${currentPeer}`);
+      const timestamp = new Date().toLocaleTimeString();
+      const colors = {
+        info: '#007bff',
+        success: '#28a745',
+        warning: '#ffc107',
+        error: '#dc3545'
+      };
+
+      const msgEl = document.createElement('div');
+      msgEl.style.color = colors[type] || '#007bff';
+      msgEl.innerHTML = `[${timestamp}] ${message}`;
+      debugEl.appendChild(msgEl);
+      debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
+    function addMessage(message, sender) {
+      const messagesEl = document.getElementById(`messages${currentPeer}`);
+      const msgEl = document.createElement('div');
+      msgEl.innerHTML = `<strong>${sender}:</strong> ${message}`;
+      messagesEl.appendChild(msgEl);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function copyToClipboard(elementId) {
+      const element = document.getElementById(elementId);
+      element.select();
+      navigator.clipboard.writeText(element.value);
+
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '✅ Copied!';
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+      }, 2000);
+    }
+
+    function initializePeerConnection() {
+      peer.pc = new RTCPeerConnection(iceConfig);
+      peer.pendingCandidates = [];
+      peer.iceGatheringComplete = false;
+
+      peer.pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          peer.pendingCandidates.push(event.candidate);
+          const candidateType = event.candidate.candidate.includes('typ host') ? 'HOST' :
+                               event.candidate.candidate.includes('typ srflx') ? 'STUN' :
+                               event.candidate.candidate.includes('typ relay') ? 'TURN' : 'OTHER';
+          addDebugInfo(`🔍 Generated ${candidateType} candidate`, 'info');
+        } else {
+          peer.iceGatheringComplete = true;
+          addDebugInfo(`🏁 ICE gathering complete!`, 'success');
+          if (peer.completeSignalingData) {
+            completeSignalingReady();
+          }
+        }
+      };
+
+      peer.pc.onconnectionstatechange = () => {
+        const state = peer.pc.connectionState;
+        addDebugInfo(`🔗 Connection: ${state.toUpperCase()}`,
+                    state === 'connected' ? 'success' :
+                    state === 'failed' ? 'error' : 'info');
+
+        switch(state) {
+          case 'connected':
+            updateStatus('Connected');
+            break;
+          case 'connecting':
+            updateStatus('Connecting...');
+            break;
+          case 'disconnected':
+          case 'failed':
+            updateStatus('Disconnected');
+            break;
+        }
+      };
+
+      peer.pc.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+      };
+    }
+
+    function setupDataChannel(channel) {
+      peer.dc = channel;
+
+      channel.onopen = () => {
+        addMessage('Data channel opened - Ready to chat!', 'System');
+        updateStatus('Connected');
+        addDebugInfo('📡 Data channel opened', 'success');
+      };
+
+      channel.onmessage = (event) => {
+        addMessage(event.data, `Peer ${currentPeer === 'A' ? 'B' : 'A'}`);
+      };
+
+      channel.onclose = () => {
+        addMessage('Data channel closed', 'System');
+        updateStatus('Disconnected');
+      };
+    }
+
+    async function createCompleteOffer() {
+      addDebugInfo(`🚀 Creating complete offer...`, 'info');
+      updateStatus('Gathering ICE Candidates...');
+
+      if (peer.pc) {
+        peer.pc.close();
+      }
+
+      initializePeerConnection();
+
+      const dataChannel = peer.pc.createDataChannel('messages', { ordered: true });
+      setupDataChannel(dataChannel);
+
+      try {
+        const offer = await peer.pc.createOffer();
+        await peer.pc.setLocalDescription(offer);
+
+        peer.completeSignalingData = {
+          type: 'offer',
+          sdp: offer.sdp,
+          candidates: []
+        };
+
+        addDebugInfo(`📝 Offer created, gathering ICE candidates...`, 'info');
+
+        // Wait for ICE gathering to complete or timeout
+        if (!peer.iceGatheringComplete) {
+          setTimeout(() => {
+            if (!peer.iceGatheringComplete) {
+              addDebugInfo(`⏰ ICE gathering timeout, using current candidates`, 'warning');
+              completeSignalingReady();
+            }
+          }, 5000);
+        }
+
+      } catch (error) {
+        addDebugInfo(`❌ Error: ${error.message}`, 'error');
+        updateStatus('Error');
+      }
+    }
+
+    function completeSignalingReady() {
+      if (peer.completeSignalingData && currentPeer === 'A') {
+        peer.completeSignalingData.candidates = peer.pendingCandidates;
+        document.getElementById('completeOfferA').value = JSON.stringify(peer.completeSignalingData, null, 2);
+        updateStatus('Complete Offer Ready');
+        addDebugInfo(`✅ Complete offer ready with ${peer.pendingCandidates.length} candidates`, 'success');
+      } else if (peer.completeSignalingData && currentPeer === 'B') {
+        peer.completeSignalingData.candidates = peer.pendingCandidates;
+        document.getElementById('completeAnswerB').value = JSON.stringify(peer.completeSignalingData, null, 2);
+        updateStatus('Complete Answer Ready');
+        addDebugInfo(`✅ Complete answer ready with ${peer.pendingCandidates.length} candidates`, 'success');
+      }
+    }
+
+    async function createCompleteAnswer() {
+      try {
+        const completeOfferText = document.getElementById('completeOfferB').value;
+        if (!completeOfferText.trim()) {
+          alert('Please paste the complete offer first!');
+          return;
+        }
+
+        const completeOffer = JSON.parse(completeOfferText);
+        addDebugInfo(`📥 Processing complete offer with ${completeOffer.candidates.length} candidates`, 'info');
+        updateStatus('Processing Offer...');
+
+        if (peer.pc) {
+          peer.pc.close();
+        }
+
+        initializePeerConnection();
+
+        // Set remote description
+        await peer.pc.setRemoteDescription({ type: 'offer', sdp: completeOffer.sdp });
+
+        // Add all remote ICE candidates
+        for (const candidate of completeOffer.candidates) {
+          await peer.pc.addIceCandidate(candidate);
+        }
+
+        addDebugInfo(`✅ Added ${completeOffer.candidates.length} remote candidates`, 'success');
+
+        // Create answer
+        const answer = await peer.pc.createAnswer();
+        await peer.pc.setLocalDescription(answer);
+
+        peer.completeSignalingData = {
+          type: 'answer',
+          sdp: answer.sdp,
+          candidates: []
+        };
+
+        updateStatus('Gathering ICE Candidates...');
+        addDebugInfo(`📝 Answer created, gathering ICE candidates...`, 'info');
+
+        // Wait for ICE gathering or timeout
+        if (!peer.iceGatheringComplete) {
+          setTimeout(() => {
+            if (!peer.iceGatheringComplete) {
+              addDebugInfo(`⏰ ICE gathering timeout, using current candidates`, 'warning');
+              completeSignalingReady();
+            }
+          }, 5000);
+        }
+
+      } catch (error) {
+        addDebugInfo(`❌ Error: ${error.message}`, 'error');
+        updateStatus('Error');
+      }
+    }
+
+    async function setCompleteAnswer() {
+      try {
+        const completeAnswerText = document.getElementById('completeAnswerA').value;
+        if (!completeAnswerText.trim()) {
+          alert('Please paste the complete answer first!');
+          return;
+        }
+
+        const completeAnswer = JSON.parse(completeAnswerText);
+        addDebugInfo(`📥 Processing complete answer with ${completeAnswer.candidates.length} candidates`, 'info');
+        updateStatus('Connecting...');
+
+        // Set remote description
+        await peer.pc.setRemoteDescription({ type: 'answer', sdp: completeAnswer.sdp });
+
+        // Add all remote ICE candidates
+        for (const candidate of completeAnswer.candidates) {
+          await peer.pc.addIceCandidate(candidate);
+        }
+
+        addDebugInfo(`✅ Added ${completeAnswer.candidates.length} remote candidates`, 'success');
+        addDebugInfo(`🎯 Connection should establish now...`, 'info');
+
+      } catch (error) {
+        addDebugInfo(`❌ Error: ${error.message}`, 'error');
+        updateStatus('Error');
+      }
+    }
+
+    function sendMessage() {
+      const input = document.getElementById(`messageInput${currentPeer}`);
+      const message = input.value.trim();
+
+      if (message && peer.dc && peer.dc.readyState === 'open') {
+        peer.dc.send(message);
+        addMessage(message, `Peer ${currentPeer}`);
+        input.value = '';
+      } else if (!message) {
+        alert('Please enter a message!');
+      } else {
+        alert('Connection not ready!');
+      }
+    }
+
+    function resetPeer() {
+      if (peer.pc) {
+        peer.pc.close();
+        peer.pc = null;
+      }
+      if (peer.dc) {
+        peer.dc = null;
+      }
+
+      peer.pendingCandidates = [];
+      peer.iceGatheringComplete = false;
+      peer.completeSignalingData = null;
+
+      document.getElementById(`completeOffer${currentPeer}`).value = '';
+      document.getElementById(`completeAnswer${currentPeer}`).value = '';
+      document.getElementById(`messages${currentPeer}`).innerHTML = '';
+      document.getElementById(`debug${currentPeer}`).innerHTML = '';
+
+      updateStatus('Disconnected');
+      addDebugInfo(`🔄 Peer ${currentPeer} reset`, 'info');
+    }
+
+    // Initialize
+    updateStatus('Disconnected');
+    initializeFromHash();
+  </script>
+</body>
+</html>
