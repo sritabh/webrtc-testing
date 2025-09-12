@@ -408,24 +408,45 @@ async function showSelectedCandidates() {
   try {
     const stats = await peer.pc.getStats();
 
+    // Collect all candidate info first
+    const localCandidates = new Map();
+    const remoteCandidates = new Map();
+
+    stats.forEach((report) => {
+      if (report.type === 'local-candidate') {
+        localCandidates.set(report.id, report);
+      } else if (report.type === 'remote-candidate') {
+        remoteCandidates.set(report.id, report);
+      }
+    });
+
     stats.forEach((report) => {
       if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-        const localCandidateId = report.localCandidateId;
-        const remoteCandidateId = report.remoteCandidateId;
-
-        // Find the actual candidate details
-        const localCandidate = Array.from(stats.values()).find(s => s.id === localCandidateId);
-        const remoteCandidate = Array.from(stats.values()).find(s => s.id === remoteCandidateId);
+        const localCandidate = localCandidates.get(report.localCandidateId);
+        const remoteCandidate = remoteCandidates.get(report.remoteCandidateId);
 
         if (localCandidate && remoteCandidate) {
-          const localType = localCandidate.candidateType || 'unknown';
+          // Enhanced type detection
+          const localType = localCandidate.candidateType ||
+                           (localCandidate.address && localCandidate.address.includes('.local') ? 'host' : 'unknown');
           const remoteType = remoteCandidate.candidateType || 'unknown';
-          const localAddr = `${localCandidate.ip || 'unknown'}:${localCandidate.port || '?'}`;
-          const remoteAddr = `${remoteCandidate.ip || 'unknown'}:${remoteCandidate.port || '?'}`;
+
+          // Better address formatting with fallback to address field
+          const localAddr = localCandidate.address && localCandidate.port ?
+                           `${localCandidate.address}:${localCandidate.port}` :
+                           `${localCandidate.ip || 'unknown'}:${localCandidate.port || '?'}`;
+          const remoteAddr = remoteCandidate.address && remoteCandidate.port ?
+                            `${remoteCandidate.address}:${remoteCandidate.port}` :
+                            `${remoteCandidate.ip || 'unknown'}:${remoteCandidate.port || '?'}`;
 
           addDebugInfo(`🎯 SELECTED PAIR:`, 'success');
           addDebugInfo(`   Local: ${localType.toUpperCase()} ${localAddr}`, 'success');
           addDebugInfo(`   Remote: ${remoteType.toUpperCase()} ${remoteAddr}`, 'success');
+
+          // Show protocol info
+          if (localCandidate.protocol) {
+            addDebugInfo(`   Protocol: ${localCandidate.protocol.toUpperCase()}`, 'info');
+          }
 
           // Show additional connection details
           if (report.bytesSent !== undefined) {
@@ -434,12 +455,63 @@ async function showSelectedCandidates() {
           if (report.currentRoundTripTime !== undefined) {
             addDebugInfo(`   ⏱️ RTT: ${Math.round(report.currentRoundTripTime * 1000)}ms`, 'info');
           }
+
+          // Show priority comparison
+          if (localCandidate.priority && remoteCandidate.priority) {
+            addDebugInfo(`   🏆 Priority: Local ${localCandidate.priority}, Remote ${remoteCandidate.priority}`, 'info');
+          }
+
+          // Analyze connection type
+          analyzeConnectionType(localType, remoteType, localAddr, remoteAddr);
         }
       }
     });
   } catch (error) {
     addDebugInfo(`❌ Could not get connection stats: ${error.message}`, 'warning');
   }
+}
+
+/**
+ * Analyze and explain the connection type being used
+ * @param {string} localType - Type of local candidate (host, srflx, etc.)
+ * @param {string} remoteType - Type of remote candidate (host, srflx, etc.)
+ * @param {string} localAddr - Local address:port
+ * @param {string} remoteAddr - Remote address:port
+ */
+function analyzeConnectionType(localType, remoteType, localAddr, remoteAddr) {
+  let explanation = '💡 ';
+
+  if (localType === 'host' && remoteType === 'host') {
+    explanation += 'Direct peer-to-peer connection (both on same network)';
+  } else if (localType === 'host' && remoteType === 'prflx') {
+    explanation += 'Peer-reflexive connection (remote peer discovered via connectivity checks)';
+  } else if (localType === 'host' && remoteType === 'srflx') {
+    explanation += 'Connection through STUN server (NAT traversal successful)';
+  } else if (localType === 'srflx' && remoteType === 'srflx') {
+    explanation += 'Both peers using STUN servers (both behind NAT)';
+  } else if (localType.includes('relay') || remoteType.includes('relay')) {
+    explanation += 'Connection through TURN relay server (direct connection failed)';
+  } else if (remoteType === 'prflx') {
+    explanation += 'Using peer-reflexive candidate (discovered during connectivity checks)';
+  } else {
+    explanation += `Connection type: Local(${localType}) ↔ Remote(${remoteType})`;
+  }
+
+  // Check if using local network addresses (.local) vs public/remote addresses
+  const localIsLocal = localAddr.includes('.local');
+  const remoteIsLocal = remoteAddr.includes('.local');
+
+  if (localIsLocal && remoteIsLocal) {
+    explanation += ' - Both using local network addresses';
+  } else if (localIsLocal && !remoteIsLocal) {
+    explanation += ' - Local network to public/remote address';
+  } else if (!localIsLocal && remoteIsLocal) {
+    explanation += ' - Public/remote to local network address';
+  } else {
+    explanation += ' - Both using public/remote addresses';
+  }
+
+  addDebugInfo(explanation, 'info');
 }
 
 /**
