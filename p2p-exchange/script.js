@@ -1,12 +1,12 @@
+/* eslint-disable no-undef */
 /* eslint-disable no-unused-vars */
 /**
- * WebRTC P2P Complete Signaling Demo
+ * WebRTC P2P Complete Signaling Demo - Core WebRTC Functions
  * This script handles the WebRTC connection between two peers with complete signaling
  * (SDP + ICE candidates bundled together to avoid timing issues)
  */
 
-// Global state management
-let currentPeer = 'A';
+// Global WebRTC state management
 const peer = {
   pc: null, // RTCPeerConnection
   dc: null, // DataChannel
@@ -28,95 +28,9 @@ const iceConfig = {
 };
 
 /**
- * Tab Management Functions
- */
-function switchTab(tabId) {
-  // Remove active class from all tabs and buttons
-  document.querySelectorAll('.tab-content').forEach(tab => {
-    tab.classList.remove('active');
-  });
-  document.querySelectorAll('.tab-button').forEach(btn => {
-    btn.classList.remove('active');
-  });
-
-  // Add active class to selected tab and button
-  document.getElementById(tabId).classList.add('active');
-  event.target.classList.add('active');
-
-  // Update current peer and URL hash
-  currentPeer = tabId === 'peer-a' ? 'A' : 'B';
-  window.location.hash = currentPeer === 'A' ? 'peer1' : 'peer2';
-}
-
-function initializeFromHash() {
-  const hash = window.location.hash;
-  if (hash === '#peer1' || hash === '#peer2') {
-    const tabId = hash === '#peer1' ? 'peer-a' : 'peer-b';
-    currentPeer = hash === '#peer1' ? 'A' : 'B';
-
-    document.querySelectorAll('.tab-content').forEach(tab => {
-      tab.classList.remove('active');
-    });
-    document.querySelectorAll('.tab-button').forEach(btn => {
-      btn.classList.remove('active');
-    });
-
-    document.getElementById(tabId).classList.add('active');
-    document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
-  }
-}
-
-/**
- * UI Helper Functions
- */
-function updateStatus(status) {
-  const statusEl = document.getElementById(`status${currentPeer}`);
-  statusEl.textContent = status;
-  statusEl.className = `status ${status.toLowerCase().replace(/[^a-z]/g, '')}`;
-}
-
-function addDebugInfo(message, type = 'info') {
-  const debugEl = document.getElementById(`debug${currentPeer}`);
-  const timestamp = new Date().toLocaleTimeString();
-  const colors = {
-    info: '#007bff',
-    success: '#28a745',
-    warning: '#ffc107',
-    error: '#dc3545'
-  };
-
-  const msgEl = document.createElement('div');
-  msgEl.style.color = colors[type] || '#007bff';
-  msgEl.innerHTML = `[${timestamp}] ${message}`;
-  debugEl.appendChild(msgEl);
-  debugEl.scrollTop = debugEl.scrollHeight;
-}
-
-function addMessage(message, sender) {
-  const messagesEl = document.getElementById(`messages${currentPeer}`);
-  const msgEl = document.createElement('div');
-  msgEl.innerHTML = `<strong>${sender}:</strong> ${message}`;
-  messagesEl.appendChild(msgEl);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
-function copyToClipboard(elementId) {
-  const element = document.getElementById(elementId);
-  element.select();
-  navigator.clipboard.writeText(element.value);
-
-  const btn = event.target;
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '✅ Copied!';
-  setTimeout(() => {
-    btn.innerHTML = originalText;
-  }, 2000);
-}
-
-/**
  * WebRTC Connection Management
  */
-function initializePeerConnection() {
+const initializePeerConnection = () => {
   peer.pc = new RTCPeerConnection(iceConfig);
   peer.pendingCandidates = [];
   peer.iceGatheringComplete = false;
@@ -190,9 +104,9 @@ function initializePeerConnection() {
   peer.pc.ondatachannel = (event) => {
     setupDataChannel(event.channel);
   };
-}
+};
 
-function setupDataChannel(channel) {
+const setupDataChannel = (channel) => {
   peer.dc = channel;
 
   channel.onopen = () => {
@@ -202,6 +116,23 @@ function setupDataChannel(channel) {
   };
 
   channel.onmessage = (event) => {
+    const currentPeer = getCurrentPeer();
+
+    // Check if it's a speed test packet
+    try {
+      const packet = JSON.parse(event.data);
+      if (packet.type && ['speed_test', 'speed_test_echo', 'ping', 'pong'].includes(packet.type)) {
+        // Handle speed test packet
+        if (typeof handleSpeedTestPacket === 'function') {
+          handleSpeedTestPacket(event.data);
+        }
+        return; // Don't display speed test packets in chat
+      }
+    } catch (e) {
+      // Not JSON or not a speed test packet, treat as regular message
+    }
+
+    // Regular chat message
     addMessage(event.data, `Peer ${currentPeer === 'A' ? 'B' : 'A'}`);
   };
 
@@ -209,12 +140,12 @@ function setupDataChannel(channel) {
     addMessage('Data channel closed', 'System');
     updateStatus('Disconnected');
   };
-}
+};
 
 /**
  * Signaling Functions
  */
-async function createCompleteOffer() {
+const createCompleteOffer = async () => {
   addDebugInfo(`🚀 Creating complete offer...`, 'info');
   updateStatus('Gathering ICE Candidates...');
 
@@ -253,9 +184,11 @@ async function createCompleteOffer() {
     addDebugInfo(`❌ Error: ${error.message}`, 'error');
     updateStatus('Error');
   }
-}
+};
 
-function completeSignalingReady() {
+const completeSignalingReady = () => {
+  const currentPeer = getCurrentPeer();
+
   if (peer.completeSignalingData && currentPeer === 'A') {
     // Bundle ICE candidates with SDP offer
     peer.completeSignalingData.candidates = peer.pendingCandidates;
@@ -269,9 +202,9 @@ function completeSignalingReady() {
     updateStatus('Complete Answer Ready');
     addDebugInfo(`✅ Complete answer ready with ${peer.pendingCandidates.length} candidates`, 'success');
   }
-}
+};
 
-async function createCompleteAnswer() {
+const createCompleteAnswer = async () => {
   try {
     const completeOfferText = document.getElementById('completeOfferB').value;
     if (!completeOfferText.trim()) {
@@ -325,9 +258,9 @@ async function createCompleteAnswer() {
     addDebugInfo(`❌ Error: ${error.message}`, 'error');
     updateStatus('Error');
   }
-}
+};
 
-async function setCompleteAnswer() {
+const setCompleteAnswer = async () => {
   try {
     const completeAnswerText = document.getElementById('completeAnswerA').value;
     if (!completeAnswerText.trim()) {
@@ -353,30 +286,12 @@ async function setCompleteAnswer() {
     addDebugInfo(`❌ Error: ${error.message}`, 'error');
     updateStatus('Error');
   }
-}
-
-/**
- * Messaging Functions
- */
-function sendMessage() {
-  const input = document.getElementById(`messageInput${currentPeer}`);
-  const message = input.value.trim();
-
-  if (message && peer.dc && peer.dc.readyState === 'open') {
-    peer.dc.send(message);
-    addMessage(message, `Peer ${currentPeer}`);
-    input.value = '';
-  } else if (!message) {
-    alert('Please enter a message!');
-  } else {
-    alert('Connection not ready!');
-  }
-}
+};
 
 /**
  * Utility Functions
  */
-function resetPeer() {
+const resetPeer = () => {
   // Close existing connections
   if (peer.pc) {
     peer.pc.close();
@@ -391,20 +306,14 @@ function resetPeer() {
   peer.iceGatheringComplete = false;
   peer.completeSignalingData = null;
 
-  // Clear UI elements
-  document.getElementById(`completeOffer${currentPeer}`).value = '';
-  document.getElementById(`completeAnswer${currentPeer}`).value = '';
-  document.getElementById(`messages${currentPeer}`).innerHTML = '';
-  document.getElementById(`debug${currentPeer}`).innerHTML = '';
-
-  updateStatus('Disconnected');
-  addDebugInfo(`🔄 Peer ${currentPeer} reset`, 'info');
-}
+  // Reset UI through utils function
+  resetPeerUI();
+};
 
 /**
  * Show which ICE candidates were selected for the active connection
  */
-async function showSelectedCandidates() {
+const showSelectedCandidates = async () => {
   try {
     const stats = await peer.pc.getStats();
 
@@ -469,7 +378,7 @@ async function showSelectedCandidates() {
   } catch (error) {
     addDebugInfo(`❌ Could not get connection stats: ${error.message}`, 'warning');
   }
-}
+};
 
 /**
  * Analyze and explain the connection type being used
@@ -478,7 +387,7 @@ async function showSelectedCandidates() {
  * @param {string} localAddr - Local address:port
  * @param {string} remoteAddr - Remote address:port
  */
-function analyzeConnectionType(localType, remoteType, localAddr, remoteAddr) {
+const analyzeConnectionType = (localType, remoteType, localAddr, remoteAddr) => {
   let explanation = '💡 ';
 
   if (localType === 'host' && remoteType === 'host') {
@@ -512,12 +421,22 @@ function analyzeConnectionType(localType, remoteType, localAddr, remoteAddr) {
   }
 
   addDebugInfo(explanation, 'info');
-}
+};
 
-/**
- * Initialization
- */
-document.addEventListener('DOMContentLoaded', function() {
-  updateStatus('Disconnected');
-  initializeFromHash();
-});
+// Export functions for use in other modules (if using modules)
+// If not using modules, these functions are available globally
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    peer,
+    iceConfig,
+    initializePeerConnection,
+    setupDataChannel,
+    createCompleteOffer,
+    completeSignalingReady,
+    createCompleteAnswer,
+    setCompleteAnswer,
+    resetPeer,
+    showSelectedCandidates,
+    analyzeConnectionType
+  };
+}
