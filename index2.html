@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC P2P Connection Example</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .peer {
+      flex: 1;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .peer h2 {
+      color: #333;
+      border-bottom: 2px solid #007bff;
+      padding-bottom: 10px;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    .status.disconnected { background: #f8d7da; color: #721c24; }
+    .status.connecting { background: #fff3cd; color: #856404; }
+    .status.connected { background: #d4edda; color: #155724; }
+    .message-area {
+      margin-top: 20px;
+    }
+    .message-input {
+      display: flex;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .message-input input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .messages {
+      height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      background: #f9f9f9;
+      border-radius: 5px;
+    }
+    .explanation {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .step {
+      margin: 15px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      border-radius: 0 5px 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Peer-to-Peer Connection Demo</h1>
+
+  <div class="explanation">
+    <h2>How This Works:</h2>
+    <div class="step">
+      <strong>Step 1:</strong> Click "Create Offer" on Peer A. This creates an SDP offer describing what Peer A can send/receive.
+    </div>
+    <div class="step">
+      <strong>Step 2:</strong> Copy the offer from Peer A and paste it into Peer B's "Remote Description" field, then click "Set Remote & Create Answer".
+    </div>
+    <div class="step">
+      <strong>Step 3:</strong> Copy the answer from Peer B back to Peer A's "Remote Description" field and click "Set Remote Description".
+    </div>
+    <div class="step">
+      <strong>Step 4:</strong> Both peers will exchange ICE candidates automatically. Once connected, you can send messages!
+    </div>
+    <p><em>Note: In a real application, steps 2-3 would happen automatically through a signaling server.</em></p>
+  </div>
+
+  <!-- Debug Information Section -->
+  <div class="explanation">
+    <h2>🔍 Connection Debug Information</h2>
+    <div style="display: flex; gap: 20px;">
+      <div style="flex: 1;">
+        <h3>Peer A Debug</h3>
+        <div id="debugA" style="font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 10px; border-radius: 5px; height: 150px; overflow-y: auto;"></div>
+      </div>
+      <div style="flex: 1;">
+        <h3>Peer B Debug</h3>
+        <div id="debugB" style="font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 10px; border-radius: 5px; height: 150px; overflow-y: auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Peer A -->
+    <div class="peer">
+      <h2>Peer A (Caller)</h2>
+      <div id="statusA" class="status disconnected">Disconnected</div>
+
+      <button id="createOfferA" onclick="createOffer('A')">1. Create Offer</button>
+      <button onclick="resetPeer('A')" style="background: #dc3545;">Reset</button>
+      <textarea id="localDescA" placeholder="Local SDP will appear here..." readonly></textarea>
+
+      <textarea id="remoteDescA" placeholder="Paste remote SDP here..."></textarea>
+      <button id="setRemoteA" onclick="setRemoteDescription('A')">3. Set Remote Description</button>
+
+      <div class="message-area">
+        <div class="message-input">
+          <input type="text" id="messageInputA" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage('A')">
+          <button onclick="sendMessage('A')">Send</button>
+        </div>
+        <div id="messagesA" class="messages"></div>
+      </div>
+    </div>
+
+    <!-- Peer B -->
+    <div class="peer">
+      <h2>Peer B (Callee)</h2>
+      <div id="statusB" class="status disconnected">Disconnected</div>
+
+      <textarea id="remoteDescB" placeholder="Paste remote SDP here..."></textarea>
+      <button id="setRemoteB" onclick="setRemoteAndCreateAnswer('B')">2. Set Remote & Create Answer</button>
+      <button onclick="resetPeer('B')" style="background: #dc3545;">Reset</button>
+
+      <textarea id="localDescB" placeholder="Local SDP will appear here..." readonly></textarea>
+
+      <div class="message-area">
+        <div class="message-input">
+          <input type="text" id="messageInputB" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage('B')">
+          <button onclick="sendMessage('B')">Send</button>
+        </div>
+        <div id="messagesB" class="messages"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Store peer connections and data channels
+    let peers = {
+      A: { pc: null, dc: null, iceCandidates: [] },
+      B: { pc: null, dc: null, iceCandidates: [] }
+    };
+
+    // ICE configuration with public STUN servers
+    const iceConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    };
+
+    function updateStatus(peer, status) {
+      const statusEl = document.getElementById(`status${peer}`);
+      statusEl.textContent = status;
+      statusEl.className = `status ${status.toLowerCase().replace(' ', '')}`;
+    }
+
+    function addMessage(peer, message, sender) {
+      const messagesEl = document.getElementById(`messages${peer}`);
+      const msgEl = document.createElement('div');
+      msgEl.innerHTML = `<strong>${sender}:</strong> ${message}`;
+      messagesEl.appendChild(msgEl);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function addDebugInfo(peer, message, type = 'info') {
+      const debugEl = document.getElementById(`debug${peer}`);
+      const timestamp = new Date().toLocaleTimeString();
+      const colors = {
+        info: '#007bff',
+        success: '#28a745',
+        warning: '#ffc107',
+        error: '#dc3545'
+      };
+
+      const msgEl = document.createElement('div');
+      msgEl.style.color = colors[type] || '#007bff';
+      msgEl.innerHTML = `[${timestamp}] ${message}`;
+      debugEl.appendChild(msgEl);
+      debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
+    function initializePeerConnection(peer) {
+      // Create new RTCPeerConnection
+      peers[peer].pc = new RTCPeerConnection(iceConfig);
+
+      // Handle ICE candidates
+      peers[peer].pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          const candidate = event.candidate;
+          const candidateType = candidate.candidate.includes('typ host') ? 'HOST' :
+                               candidate.candidate.includes('typ srflx') ? 'STUN' :
+                               candidate.candidate.includes('typ relay') ? 'TURN' : 'OTHER';
+
+          const candidateInfo = candidate.candidate.split(' ');
+          const ip = candidateInfo[4];
+          const port = candidateInfo[5];
+
+          addDebugInfo(peer, `🔍 Generated ${candidateType} candidate: ${ip}:${port}`, 'info');
+          console.log(`${peer} ICE candidate:`, event.candidate);
+
+          // Store the candidate for manual exchange
+          const remotePeer = peer === 'A' ? 'B' : 'A';
+
+          // Try to add the candidate to the remote peer if ready
+          if (peers[remotePeer].pc && peers[remotePeer].pc.remoteDescription) {
+            peers[remotePeer].pc.addIceCandidate(event.candidate)
+              .then(() => {
+                addDebugInfo(remotePeer, `✅ Added ${candidateType} candidate from Peer ${peer}`, 'success');
+              })
+              .catch(err => {
+                addDebugInfo(remotePeer, `❌ Failed to add candidate: ${err.message}`, 'error');
+                console.error(`Error adding ICE candidate to ${remotePeer}:`, err);
+              });
+          } else {
+            // Store for later if remote description isn't set yet
+            peers[remotePeer].iceCandidates.push(event.candidate);
+            addDebugInfo(remotePeer, `📦 Stored ${candidateType} candidate for later`, 'warning');
+          }
+        } else {
+          addDebugInfo(peer, `🏁 ICE candidate gathering complete`, 'success');
+        }
+      };
+
+      // Handle connection state changes
+      peers[peer].pc.onconnectionstatechange = () => {
+        const state = peers[peer].pc.connectionState;
+        console.log(`${peer} connection state:`, state);
+        addDebugInfo(peer, `Connection state: ${state}`, 'info');
+
+        switch(state) {
+          case 'connected':
+            updateStatus(peer, 'Connected');
+            addDebugInfo(peer, 'Peer connected', 'success');
+            break;
+          case 'connecting':
+            updateStatus(peer, 'Connecting...');
+            addDebugInfo(peer, 'Connecting to peer...', 'info');
+            break;
+          case 'disconnected':
+          case 'failed':
+            updateStatus(peer, 'Disconnected');
+            addDebugInfo(peer, 'Connection failed or disconnected', 'error');
+            break;
+        }
+      };
+
+      // Handle ICE connection state changes
+      peers[peer].pc.oniceconnectionstatechange = () => {
+        const state = peers[peer].pc.iceConnectionState;
+        console.log(`${peer} ICE connection state:`, state);
+        addDebugInfo(peer, `ICE connection state: ${state}`, 'info');
+      };
+
+      // Handle incoming data channels (for peer B)
+      peers[peer].pc.ondatachannel = (event) => {
+        const channel = event.channel;
+        setupDataChannel(peer, channel);
+      };
+    }
+
+    function setupDataChannel(peer, channel) {
+      peers[peer].dc = channel;
+
+      channel.onopen = () => {
+        console.log(`${peer} data channel opened`);
+        addMessage(peer, 'Data channel opened - Ready to send messages!', 'System');
+        updateStatus(peer, 'Connected');
+        addDebugInfo(peer, 'Data channel opened', 'success');
+      };
+
+      channel.onmessage = (event) => {
+        addMessage(peer, event.data, `Peer ${peer === 'A' ? 'B' : 'A'}`);
+      };
+
+      channel.onerror = (error) => {
+        console.error(`${peer} data channel error:`, error);
+        addMessage(peer, `Data channel error: ${error}`, 'System');
+        addDebugInfo(peer, `Data channel error: ${error}`, 'error');
+      };
+
+      channel.onclose = () => {
+        console.log(`${peer} data channel closed`);
+        addMessage(peer, 'Data channel closed', 'System');
+        updateStatus(peer, 'Disconnected');
+        addDebugInfo(peer, 'Data channel closed', 'warning');
+      };
+    }
+
+    // Helper function to process stored ICE candidates
+    async function processStoredIceCandidates(peer) {
+      const candidates = peers[peer].iceCandidates;
+      peers[peer].iceCandidates = []; // Clear the stored candidates
+
+      addDebugInfo(peer, `📦 Processing ${candidates.length} stored ICE candidates`, 'info');
+
+      for (const candidate of candidates) {
+        try {
+          await peers[peer].pc.addIceCandidate(candidate);
+          addDebugInfo(peer, `✅ Added stored ICE candidate`, 'success');
+          console.log(`${peer} processed stored ICE candidate`);
+        } catch (error) {
+          addDebugInfo(peer, `❌ Failed to add stored candidate: ${error.message}`, 'error');
+          console.error(`${peer} error adding stored ICE candidate:`, error);
+        }
+      }
+
+      if (candidates.length > 0) {
+        addDebugInfo(peer, `🏁 Finished processing stored candidates`, 'success');
+      }
+    }
+
+    async function createOffer(peer) {
+      // Reset any existing connection
+      if (peers[peer].pc) {
+        peers[peer].pc.close();
+      }
+
+      initializePeerConnection(peer);
+
+      // Create data channel for peer A (the caller)
+      const dataChannel = peers[peer].pc.createDataChannel('messages', {
+        ordered: true
+      });
+      setupDataChannel(peer, dataChannel);
+
+      try {
+        // Create offer
+        console.log(`${peer} creating offer...`);
+        addDebugInfo(peer, 'Creating offer...', 'info');
+        const offer = await peers[peer].pc.createOffer({
+          offerToReceiveAudio: false,
+          offerToReceiveVideo: false
+        });
+
+        await peers[peer].pc.setLocalDescription(offer);
+        console.log(`${peer} local description set:`, offer);
+        addDebugInfo(peer, 'Local description set', 'success');
+
+        // Display the offer SDP
+        document.getElementById(`localDesc${peer}`).value = JSON.stringify(offer, null, 2);
+
+        updateStatus(peer, 'Offer Created');
+
+      } catch (error) {
+        console.error(`Error creating offer for ${peer}:`, error);
+        alert(`Error creating offer: ${error.message}`);
+        updateStatus(peer, 'Error');
+        addDebugInfo(peer, `Error creating offer: ${error.message}`, 'error');
+      }
+    }
+
+    async function setRemoteAndCreateAnswer(peer) {
+      if (!peers[peer].pc) {
+        initializePeerConnection(peer);
+      }
+
+      try {
+        // Get remote description from textarea
+        const remoteDescText = document.getElementById(`remoteDesc${peer}`).value;
+        if (!remoteDescText.trim()) {
+          alert('Please paste the remote SDP first!');
+          return;
+        }
+
+        const remoteDesc = JSON.parse(remoteDescText);
+        console.log(`${peer} setting remote description:`, remoteDesc);
+        addDebugInfo(peer, 'Setting remote description', 'info');
+
+        await peers[peer].pc.setRemoteDescription(remoteDesc);
+        console.log(`${peer} remote description set successfully`);
+        addDebugInfo(peer, 'Remote description set successfully', 'success');
+
+        // Process any stored ICE candidates
+        await processStoredIceCandidates(peer);
+
+        // Create answer
+        const answer = await peers[peer].pc.createAnswer();
+        await peers[peer].pc.setLocalDescription(answer);
+
+        // Display the answer SDP
+        document.getElementById(`localDesc${peer}`).value = JSON.stringify(answer, null, 2);
+
+        updateStatus(peer, 'Answer Created');
+        console.log(`${peer} created answer:`, answer);
+        addDebugInfo(peer, 'Answer created and local description set', 'success');
+
+      } catch (error) {
+        console.error(`Error setting remote description and creating answer for ${peer}:`, error);
+        alert(`Error: ${error.message}`);
+        updateStatus(peer, 'Error');
+        addDebugInfo(peer, `Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function setRemoteDescription(peer) {
+      try {
+        // Get remote description from textarea
+        const remoteDescText = document.getElementById(`remoteDesc${peer}`).value;
+        if (!remoteDescText.trim()) {
+          alert('Please paste the remote SDP first!');
+          return;
+        }
+
+        if (!peers[peer].pc) {
+          alert('Error: Peer connection not initialized. Please create an offer first!');
+          return;
+        }
+
+        const remoteDesc = JSON.parse(remoteDescText);
+        console.log(`${peer} setting remote description:`, remoteDesc);
+        addDebugInfo(peer, 'Setting remote description', 'info');
+
+        await peers[peer].pc.setRemoteDescription(remoteDesc);
+        console.log(`${peer} remote description set successfully`);
+        addDebugInfo(peer, 'Remote description set successfully', 'success');
+
+        // Process any stored ICE candidates
+        await processStoredIceCandidates(peer);
+
+        updateStatus(peer, 'Connecting...');
+        addDebugInfo(peer, 'Connecting to peer...', 'info');
+
+      } catch (error) {
+        console.error(`Error setting remote description for ${peer}:`, error);
+        alert(`Error: ${error.message}`);
+        updateStatus(peer, 'Error');
+        addDebugInfo(peer, `Error: ${error.message}`, 'error');
+      }
+    }
+
+    function sendMessage(peer) {
+      const input = document.getElementById(`messageInput${peer}`);
+      const message = input.value.trim();
+
+      if (message && peers[peer].dc && peers[peer].dc.readyState === 'open') {
+        peers[peer].dc.send(message);
+        addMessage(peer, message, `Peer ${peer}`);
+        input.value = '';
+      } else if (!message) {
+        alert('Please enter a message!');
+      } else {
+        alert('Connection not ready! Make sure both peers are connected.');
+      }
+    }
+
+    function resetPeer(peer) {
+      // Close existing connections
+      if (peers[peer].pc) {
+        peers[peer].pc.close();
+        peers[peer].pc = null;
+      }
+      if (peers[peer].dc) {
+        peers[peer].dc = null;
+      }
+
+      // Clear stored ICE candidates
+      peers[peer].iceCandidates = [];
+
+      // Clear UI elements
+      document.getElementById(`localDesc${peer}`).value = '';
+      document.getElementById(`remoteDesc${peer}`).value = '';
+      document.getElementById(`messages${peer}`).innerHTML = '';
+      document.getElementById(`debug${peer}`).innerHTML = '';
+
+      // Reset status
+      updateStatus(peer, 'Disconnected');
+      addDebugInfo(peer, `🔄 Peer ${peer} has been reset`, 'info');
+
+      console.log(`${peer} has been reset`);
+      addDebugInfo(peer, 'Peer connection reset', 'warning');
+    }
+
+    // Initialize both peers as disconnected
+    updateStatus('A', 'Disconnected');
+    updateStatus('B', 'Disconnected');
+  </script>
+</body>
+</html>

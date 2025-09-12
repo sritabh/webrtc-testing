@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebRTC P2P Network Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 10px;
+      font-size: 2.2em;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #7f8c8d;
+      margin-bottom: 30px;
+      font-style: italic;
+    }
+
+    .user-section {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 25px;
+      align-items: center;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .user-section input {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #e9ecef;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+
+    .user-section input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .user-section button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+    }
+
+    .user-section button:hover:not(:disabled) {
+      background: #5a67d8;
+    }
+
+    .user-section button:disabled {
+      background: #cbd5e0;
+      cursor: not-allowed;
+    }
+
+    .status-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .status {
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+    }
+
+    .status.offline { background: #fee; color: #c53030; }
+    .status.connecting { background: #fef5e7; color: #d69e2e; }
+    .status.connected { background: #f0fff4; color: #38a169; }
+
+    .peer-info {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .chat-section {
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .chat-header {
+      background: #4a5568;
+      color: white;
+      padding: 12px 20px;
+      font-weight: bold;
+    }
+
+    .messages {
+      height: 350px;
+      overflow-y: auto;
+      padding: 20px;
+      background: #fafafa;
+    }
+
+    .message {
+      margin-bottom: 12px;
+      padding: 10px 15px;
+      border-radius: 8px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+
+    .message.sent {
+      background: #667eea;
+      color: white;
+      margin-left: auto;
+      text-align: right;
+    }
+
+    .message.received {
+      background: #e2e8f0;
+      color: #2d3748;
+    }
+
+    .message-meta {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 5px;
+    }
+
+    .input-section {
+      display: flex;
+      gap: 10px;
+      padding: 15px 20px;
+      background: #f7fafc;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .input-section input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .input-section input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .input-section button {
+      padding: 12px 20px;
+      background: #48bb78;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .input-section button:hover:not(:disabled) {
+      background: #38a169;
+    }
+
+    .input-section button:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+    }
+
+    .peers-list {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 20px;
+    }
+
+    .peers-list h3 {
+      margin: 0 0 10px 0;
+      color: #4a5568;
+    }
+
+    .peer-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .peer-item:last-child {
+      border-bottom: none;
+    }
+
+    .connection-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .connection-indicator.connected { background: #48bb78; }
+    .connection-indicator.connecting { background: #ed8936; }
+    .connection-indicator.disconnected { background: #e53e3e; }
+
+    .info-panel {
+      background: #ebf8ff;
+      border-left: 4px solid #3182ce;
+      padding: 15px;
+      margin-bottom: 25px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .controls button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #5a67d8;
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #cbd5e0;
+    }
+
+    .btn-danger {
+      background: #e53e3e;
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: #c53030;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>🌐 WebRTC P2P Network Chat</h1>
+    <p class="subtitle">Connect with peers across different browsers and chat in real-time</p>
+
+    <div class="info-panel">
+      <strong>How to use:</strong> Open this page in multiple browser tabs or different browsers.
+      Enter your name, join the network, and start chatting with other connected peers!
+    </div>
+
+    <div class="user-section">
+      <input type="text" id="usernameInput" placeholder="Enter your name..." maxlength="20">
+      <button id="joinButton" class="btn-primary">Join Network</button>
+      <button id="leaveButton" class="btn-danger" disabled>Leave Network</button>
+    </div>
+
+    <div class="status-section">
+      <div>
+        <span class="status offline" id="statusIndicator">Offline</span>
+      </div>
+      <div class="peer-info" id="peerInfo">
+        <span id="peerCount">0</span> peers connected
+      </div>
+    </div>
+
+    <div class="chat-section">
+      <div class="chat-header">
+        💬 Network Chat
+      </div>
+      <div class="messages" id="messagesContainer">
+        <div class="message received">
+          <div>Welcome to WebRTC P2P Network Chat!</div>
+          <div class="message-meta">Join the network to start chatting</div>
+        </div>
+      </div>
+      <div class="input-section">
+        <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+        <button id="sendButton" disabled>Send</button>
+      </div>
+    </div>
+
+    <div class="peers-list">
+      <h3>Connected Peers</h3>
+      <div id="peersContainer">
+        <div style="color: #a0aec0; font-style: italic; text-align: center; padding: 20px;">
+          No peers connected
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebRTC adapter for cross-browser compatibility -->
+  <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+
+  <script>
+    class P2PNetworkChat {
+      constructor() {
+        this.username = '';
+        this.isConnected = false;
+        this.peers = new Map();
+        this.dataChannels = new Map();
+        this.signalingChannel = null;
+
+        // WebRTC configuration with STUN servers for NAT traversal
+        this.rtcConfig = {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ],
+          iceCandidatePoolSize: 10
+        };
+
+        this.initializeElements();
+        this.setupEventListeners();
+        this.initializeSignaling();
+      }
+
+      initializeElements() {
+        this.elements = {
+          usernameInput: document.getElementById('usernameInput'),
+          joinButton: document.getElementById('joinButton'),
+          leaveButton: document.getElementById('leaveButton'),
+          statusIndicator: document.getElementById('statusIndicator'),
+          peerCount: document.getElementById('peerCount'),
+          peerInfo: document.getElementById('peerInfo'),
+          messagesContainer: document.getElementById('messagesContainer'),
+          messageInput: document.getElementById('messageInput'),
+          sendButton: document.getElementById('sendButton'),
+          peersContainer: document.getElementById('peersContainer')
+        };
+      }
+
+      setupEventListeners() {
+        this.elements.joinButton.addEventListener('click', () => this.joinNetwork());
+        this.elements.leaveButton.addEventListener('click', () => this.leaveNetwork());
+        this.elements.sendButton.addEventListener('click', () => this.sendMessage());
+
+        this.elements.messageInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' && !this.elements.sendButton.disabled) {
+            this.sendMessage();
+          }
+        });
+
+        this.elements.usernameInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' && !this.elements.joinButton.disabled) {
+            this.joinNetwork();
+          }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+          this.leaveNetwork();
+        });
+      }
+
+      initializeSignaling() {
+        // Using localStorage and storage events for simple cross-tab signaling
+        // In production, you'd use WebSocket or other real-time communication
+        this.signalingKey = 'webrtc_signaling';
+
+        window.addEventListener('storage', (e) => {
+          if (e.key === this.signalingKey && e.newValue) {
+            const signal = JSON.parse(e.newValue);
+            this.handleSignalingMessage(signal);
+          }
+        });
+
+        // Cleanup old signaling data
+        localStorage.removeItem(this.signalingKey);
+      }
+
+      async joinNetwork() {
+        const username = this.elements.usernameInput.value.trim();
+
+        if (!username) {
+          alert('Please enter your name first!');
+          return;
+        }
+
+        if (username.length > 20) {
+          alert('Name is too long! Please use 20 characters or less.');
+          return;
+        }
+
+        try {
+          this.username = username;
+          this.updateStatus('connecting', 'Connecting to network...');
+
+          // Disable join controls
+          this.elements.usernameInput.disabled = true;
+          this.elements.joinButton.disabled = true;
+          this.elements.leaveButton.disabled = false;
+
+          // Announce presence to other tabs
+          this.sendSignalingMessage({
+            type: 'peer-joined',
+            username: this.username,
+            peerId: this.generatePeerId(),
+            timestamp: Date.now()
+          });
+
+          this.isConnected = true;
+          this.updateStatus('connected', 'Connected to network');
+          this.enableChat();
+
+          // Add welcome message
+          this.addMessage('system', `You joined as "${username}"`);
+
+        } catch (error) {
+          console.error('Error joining network:', error);
+          this.updateStatus('offline', 'Failed to connect');
+          this.resetUI();
+        }
+      }
+
+      async leaveNetwork() {
+        if (!this.isConnected) return;
+
+        try {
+          // Announce departure
+          this.sendSignalingMessage({
+            type: 'peer-left',
+            username: this.username,
+            peerId: this.peerId,
+            timestamp: Date.now()
+          });
+
+          // Close all peer connections
+          for (const [peerId, connection] of this.peers) {
+            connection.close();
+          }
+
+          // Close all data channels
+          for (const [peerId, channel] of this.dataChannels) {
+            if (channel.readyState === 'open') {
+              channel.close();
+            }
+          }
+
+          // Clear collections
+          this.peers.clear();
+          this.dataChannels.clear();
+
+          this.isConnected = false;
+          this.updateStatus('offline', 'Disconnected from network');
+          this.resetUI();
+          this.addMessage('system', 'You left the network');
+
+        } catch (error) {
+          console.error('Error leaving network:', error);
+        }
+      }
+
+      async handleSignalingMessage(signal) {
+        if (!this.isConnected) return;
+
+        const { type, peerId, username } = signal;
+
+        switch (type) {
+          case 'peer-joined':
+            if (peerId !== this.peerId) {
+              await this.handlePeerJoined(signal);
+            }
+            break;
+
+          case 'peer-left':
+            if (peerId !== this.peerId) {
+              this.handlePeerLeft(signal);
+            }
+            break;
+
+          case 'offer':
+            if (signal.targetPeer === this.peerId) {
+              await this.handleOffer(signal);
+            }
+            break;
+
+          case 'answer':
+            if (signal.targetPeer === this.peerId) {
+              await this.handleAnswer(signal);
+            }
+            break;
+
+          case 'ice-candidate':
+            if (signal.targetPeer === this.peerId) {
+              await this.handleIceCandidate(signal);
+            }
+            break;
+        }
+      }
+
+      async handlePeerJoined(signal) {
+        const { peerId, username } = signal;
+
+        if (this.peers.has(peerId)) return; // Already connected
+
+        try {
+          // Create peer connection
+          const peerConnection = new RTCPeerConnection(this.rtcConfig);
+          this.peers.set(peerId, peerConnection);
+
+          // Set up ICE candidate handling
+          peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+              this.sendSignalingMessage({
+                type: 'ice-candidate',
+                candidate: event.candidate,
+                sourcePeer: this.peerId,
+                targetPeer: peerId,
+                username: this.username
+              });
+            }
+          };
+
+          // Handle incoming data channel
+          peerConnection.ondatachannel = (event) => {
+            const channel = event.channel;
+            this.setupDataChannel(channel, peerId, username);
+          };
+
+          // Create data channel for outgoing messages
+          const dataChannel = peerConnection.createDataChannel('messages', {
+            ordered: true
+          });
+
+          this.setupDataChannel(dataChannel, peerId, username);
+
+          // Create and send offer
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+
+          this.sendSignalingMessage({
+            type: 'offer',
+            offer: offer,
+            sourcePeer: this.peerId,
+            targetPeer: peerId,
+            username: this.username
+          });
+
+          this.addMessage('system', `${username} joined the network`);
+          this.updatePeersList();
+
+        } catch (error) {
+          console.error('Error handling peer joined:', error);
+        }
+      }
+
+      async handleOffer(signal) {
+        const { offer, sourcePeer, username } = signal;
+
+        try {
+          let peerConnection = this.peers.get(sourcePeer);
+
+          if (!peerConnection) {
+            peerConnection = new RTCPeerConnection(this.rtcConfig);
+            this.peers.set(sourcePeer, peerConnection);
+
+            peerConnection.onicecandidate = (event) => {
+              if (event.candidate) {
+                this.sendSignalingMessage({
+                  type: 'ice-candidate',
+                  candidate: event.candidate,
+                  sourcePeer: this.peerId,
+                  targetPeer: sourcePeer,
+                  username: this.username
+                });
+              }
+            };
+
+            peerConnection.ondatachannel = (event) => {
+              const channel = event.channel;
+              this.setupDataChannel(channel, sourcePeer, username);
+            };
+          }
+
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+
+          this.sendSignalingMessage({
+            type: 'answer',
+            answer: answer,
+            sourcePeer: this.peerId,
+            targetPeer: sourcePeer,
+            username: this.username
+          });
+
+        } catch (error) {
+          console.error('Error handling offer:', error);
+        }
+      }
+
+      async handleAnswer(signal) {
+        const { answer, sourcePeer } = signal;
+
+        try {
+          const peerConnection = this.peers.get(sourcePeer);
+          if (peerConnection) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+          }
+        } catch (error) {
+          console.error('Error handling answer:', error);
+        }
+      }
+
+      async handleIceCandidate(signal) {
+        const { candidate, sourcePeer } = signal;
+
+        try {
+          const peerConnection = this.peers.get(sourcePeer);
+          if (peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (error) {
+          console.error('Error handling ICE candidate:', error);
+        }
+      }
+
+      handlePeerLeft(signal) {
+        const { peerId, username } = signal;
+
+        // Close peer connection
+        const peerConnection = this.peers.get(peerId);
+        if (peerConnection) {
+          peerConnection.close();
+          this.peers.delete(peerId);
+        }
+
+        // Close data channel
+        const dataChannel = this.dataChannels.get(peerId);
+        if (dataChannel) {
+          if (dataChannel.readyState === 'open') {
+            dataChannel.close();
+          }
+          this.dataChannels.delete(peerId);
+        }
+
+        this.addMessage('system', `${username} left the network`);
+        this.updatePeersList();
+      }
+
+      setupDataChannel(channel, peerId, username) {
+        this.dataChannels.set(peerId, channel);
+
+        channel.onopen = () => {
+          console.log(`Data channel opened with ${username} (${peerId})`);
+          this.updatePeersList();
+        };
+
+        channel.onclose = () => {
+          console.log(`Data channel closed with ${username} (${peerId})`);
+          this.dataChannels.delete(peerId);
+          this.updatePeersList();
+        };
+
+        channel.onmessage = (event) => {
+          const messageData = JSON.parse(event.data);
+          this.addMessage('received', messageData.message, messageData.username, messageData.timestamp);
+        };
+
+        channel.onerror = (error) => {
+          console.error(`Data channel error with ${username}:`, error);
+        };
+      }
+
+      sendMessage() {
+        const messageText = this.elements.messageInput.value.trim();
+        if (!messageText) return;
+
+        const messageData = {
+          message: messageText,
+          username: this.username,
+          timestamp: Date.now()
+        };
+
+        // Send to all connected peers
+        let sentCount = 0;
+        for (const [peerId, channel] of this.dataChannels) {
+          if (channel.readyState === 'open') {
+            channel.send(JSON.stringify(messageData));
+            sentCount++;
+          }
+        }
+
+        if (sentCount > 0) {
+          this.addMessage('sent', messageText, this.username, messageData.timestamp);
+          this.elements.messageInput.value = '';
+        } else {
+          this.addMessage('system', 'No peers connected to receive your message');
+        }
+      }
+
+      addMessage(type, message, username = '', timestamp = Date.now()) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${type}`;
+
+        const timeString = new Date(timestamp).toLocaleTimeString();
+
+        if (type === 'system') {
+          messageElement.innerHTML = `
+            <div style="font-style: italic; color: #666;">${message}</div>
+            <div class="message-meta">${timeString}</div>
+          `;
+        } else {
+          const displayName = type === 'sent' ? 'You' : username;
+          messageElement.innerHTML = `
+            <div><strong>${displayName}:</strong> ${message}</div>
+            <div class="message-meta">${timeString}</div>
+          `;
+        }
+
+        this.elements.messagesContainer.appendChild(messageElement);
+        this.elements.messagesContainer.scrollTop = this.elements.messagesContainer.scrollHeight;
+      }
+
+      updateStatus(status, message) {
+        this.elements.statusIndicator.className = `status ${status}`;
+        this.elements.statusIndicator.textContent = message;
+      }
+
+      updatePeersList() {
+        const connectedCount = this.dataChannels.size;
+        this.elements.peerCount.textContent = connectedCount;
+
+        if (connectedCount === 0) {
+          this.elements.peersContainer.innerHTML = `
+            <div style="color: #a0aec0; font-style: italic; text-align: center; padding: 20px;">
+              No peers connected
+            </div>
+          `;
+        } else {
+          this.elements.peersContainer.innerHTML = '';
+
+          for (const [peerId, channel] of this.dataChannels) {
+            const peerElement = document.createElement('div');
+            peerElement.className = 'peer-item';
+
+            const status = channel.readyState === 'open' ? 'connected' : 'connecting';
+            const peerName = `Peer ${peerId.substring(0, 8)}...`;
+
+            peerElement.innerHTML = `
+              <div>
+                <span class="connection-indicator ${status}"></span>
+                ${peerName}
+              </div>
+              <div style="font-size: 12px; color: #666;">${status}</div>
+            `;
+
+            this.elements.peersContainer.appendChild(peerElement);
+          }
+        }
+      }
+
+      enableChat() {
+        this.elements.messageInput.disabled = false;
+        this.elements.sendButton.disabled = false;
+        this.elements.messageInput.focus();
+      }
+
+      resetUI() {
+        this.elements.usernameInput.disabled = false;
+        this.elements.joinButton.disabled = false;
+        this.elements.leaveButton.disabled = true;
+        this.elements.messageInput.disabled = true;
+        this.elements.sendButton.disabled = true;
+        this.elements.messageInput.value = '';
+        this.updatePeersList();
+      }
+
+      sendSignalingMessage(message) {
+        // Add unique ID and source info
+        message.peerId = message.peerId || this.peerId;
+        message.id = this.generateMessageId();
+
+        // Use localStorage for cross-tab communication
+        localStorage.setItem(this.signalingKey, JSON.stringify(message));
+
+        // Remove after short delay to allow other tabs to process
+        setTimeout(() => {
+          const current = localStorage.getItem(this.signalingKey);
+          if (current && JSON.parse(current).id === message.id) {
+            localStorage.removeItem(this.signalingKey);
+          }
+        }, 1000);
+      }
+
+      generatePeerId() {
+        if (!this.peerId) {
+          this.peerId = 'peer_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+        }
+        return this.peerId;
+      }
+
+      generateMessageId() {
+        return 'msg_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+      }
+    }
+
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', () => {
+      const app = new P2PNetworkChat();
+
+      // Make it available globally for debugging
+      window.p2pChat = app;
+
+      console.log('🚀 WebRTC P2P Network Chat initialized!');
+      console.log('Open this page in multiple tabs to test peer connections');
+      console.log('Available globally as: window.p2pChat');
+    });
+  </script>
+</body>
+</html>
