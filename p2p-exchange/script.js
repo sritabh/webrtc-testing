@@ -275,9 +275,9 @@ const setCompleteAnswer = async () => {
     await peer.pc.setRemoteDescription({type: 'answer', sdp: completeAnswer.sdp});
 
     // Add all remote ICE candidates from the answer
-    // for (const candidate of completeAnswer.candidates) {
-    //   await peer.pc.addIceCandidate(candidate);
-    // }
+    for (const candidate of completeAnswer.candidates) {
+      await peer.pc.addIceCandidate(candidate);
+    }
 
     addDebugInfo(`✅ Added ${completeAnswer.candidates.length} remote candidates`, 'success');
     addDebugInfo(`🎯 Connection should establish now...`, 'info');
